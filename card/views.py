@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -9,11 +10,23 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Cartao, LoteCartoes
 from .serializers import (CartaoSerializer, CartaoCreateSerializer,
-                          UploadCartaoFileSerializer, LoteCartoesSerializer)
+                          UploadCartaoFileSerializer, LoteCartoesSerializer,
+                          CartaoSearchSerializer)
 from logs.models import LogRequest
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def log_request(user, endpoint, method, request_body='', response_body=''):
+    log = LogRequest(
+        user=user,
+        endpoint=endpoint,
+        method=method,
+        request_body=request_body,
+        response_body=response_body,
+    )
+    log.save()
 
 
 @extend_schema_view(
@@ -27,13 +40,15 @@ class UploadCartaoFileView(APIView):
     def post(self, request, *args, **kwargs):
         file = request.FILES.get('file')
         if not file:
+            log_request(request.user, request.path, request.method, str(
+                request.data), '{"error": "Nenhum arquivo fornecido"}')
             return Response(
-                        {'error': 'Nenhum arquivo fornecido'},
-                        status=status.HTTP_400_BAD_REQUEST
-                        )
+                {'error': 'Nenhum arquivo fornecido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        num_cartoes = []
         lote = None
+        cartoes_validos = set()
 
         try:
             for i, line in enumerate(file):
@@ -46,36 +61,52 @@ class UploadCartaoFileView(APIView):
                     lote = decoded_line[41:45].strip()
                 else:
                     numero_cartao = decoded_line[7:27].strip()
-                    if len(numero_cartao) > 10:
-                        num_cartoes.append(numero_cartao)
+                    if re.match(r'^\d{16}$', numero_cartao):
+                        cartoes_validos.add(numero_cartao)
 
             if not lote:
-                return Response(
-                                {'error': 'Lote não encontrado no arquivo'}, 
+                log_request(request.user, request.path, request.method, str(
+                    request.data), '{"error": "Lote não encontrado no arquivo"}')
+                return Response({
+                                'error': 'Lote não encontrado no arquivo'},
                                 status=status.HTTP_400_BAD_REQUEST
                                 )
 
-            # Create Cartao objects
-            for numero_cartao in num_cartoes:
+            cartoes_existentes = set(Cartao.objects.filter(
+                numero__in=cartoes_validos).values_list('numero', flat=True))
+            cartoes_a_inserir = cartoes_validos - cartoes_existentes
+
+            if not cartoes_a_inserir:
+                log_request(request.user, request.path, request.method, str(
+                    request.data), '{"error": "Todos os cartões no arquivo já estão cadastrados ou são inválidos."}')
+                return Response(
+                    {'error': 'Todos os cartões no arquivo já estão cadastrados ou são inválidos.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            for numero_cartao in cartoes_a_inserir:
                 Cartao.objects.create(numero=numero_cartao, lote=lote)
 
-            # Create LoteCartoes object
             lote_cartoes = LoteCartoes.objects.create(
                 usuario=request.user,
-                quantidade=len(num_cartoes),
+                quantidade=len(cartoes_a_inserir),
                 nome=nome,
                 data=data_formatada,
                 numero=lote
             )
 
             serializer = LoteCartoesSerializer(lote_cartoes)
+            log_request(request.user, request.path, request.method,
+                        str(request.data), serializer.data)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error(f"Error processing file: {e}")
+            log_request(request.user, request.path, request.method,
+                        str(request.data), f'{{"error": "{str(e)}"}}')
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
-                )
+            )
 
 
 @extend_schema_view(
@@ -89,16 +120,10 @@ class CartaoCreateView(generics.CreateAPIView):
     authentication_classes = [JWTAuthentication]
 
     def post(self, request, *args, **kwargs):
-        # Log request
-        log = LogRequest(
-            user=request.user,
-            endpoint=request.path,
-            method=request.method,
-            request_body=str(request.data),
-            response_body='',
-        )
-        log.save()
-        return super().post(request, *args, **kwargs)
+        response = super().post(request, *args, **kwargs)
+        log_request(request.user, request.path, request.method,
+                    str(request.data), response.data)
+        return response
 
 
 @extend_schema_view(
@@ -112,16 +137,10 @@ class CartaoListView(generics.ListAPIView):
     authentication_classes = [JWTAuthentication]
 
     def get(self, request, *args, **kwargs):
-        # Log request
-        log = LogRequest(
-            user=request.user,
-            endpoint=request.path,
-            method=request.method,
-            request_body='',
-            response_body=str(self.get_queryset().values()),
-        )
-        log.save()
-        return super().get(request, *args, **kwargs)
+        response = super().get(request, *args, **kwargs)
+        log_request(request.user, request.path,
+                    request.method, '', response.data)
+        return response
 
 
 @extend_schema_view(
@@ -129,19 +148,27 @@ class CartaoListView(generics.ListAPIView):
     get=extend_schema(tags=['Cartão'])
 )
 class CartaoSearchView(APIView):
+    serializer_class = CartaoSearchSerializer
+
     def get(self, request, *args, **kwargs):
         numero = kwargs.get('numero')
         if not numero:
+            log_request(request.user, request.path, request.method, str(
+                request.data), '{"error": "Número do cartão não fornecido"}')
             return Response(
                 {'error': 'Número do cartão não fornecido'},
                 status=status.HTTP_400_BAD_REQUEST
-                )
+            )
 
         try:
             cartao = Cartao.objects.get(numero=numero)
+            log_request(request.user, request.path, request.method,
+                        str(request.data), f'{{"id": "{cartao.id}"}}')
             return Response({'id': cartao.id}, status=status.HTTP_200_OK)
         except Cartao.DoesNotExist:
+            log_request(request.user, request.path, request.method, str(
+                request.data), '{"error": "Cartão não encontrado"}')
             return Response(
                 {'error': 'Cartão não encontrado'},
                 status=status.HTTP_404_NOT_FOUND
-                )
+            )

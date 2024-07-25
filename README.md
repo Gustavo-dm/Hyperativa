@@ -71,9 +71,3 @@ Para executar os testes
 python manage.py test
 ```
 
-
-###TODO
-- Restrições para cartões com o mesmo número
-- Logar as requisições de uso da API e seus retornos. - Todos os endpoints
-- Utilizar criptografia (end-to-end encryption) para tráfego de informações.
-- Pensar em escalabilidade, pode ser uma quantidade muito grande de dados.

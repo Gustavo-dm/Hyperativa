@@ -3,8 +3,9 @@ from django.core.exceptions import ValidationError
 import re
 from custom_user.models import CustomUser
 
+
 class Cartao(models.Model):
-    numero = models.CharField(max_length=30)
+    numero = models.CharField(max_length=30, unique=True)
     lote = models.CharField(max_length=30)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -32,7 +33,7 @@ class LoteCartoes(models.Model):
     quantidade = models.IntegerField()
     nome = models.CharField(max_length=30, blank=True)
     data = models.CharField(max_length=8, blank=True)
-    numero = models.CharField(max_length=8, blank=True)
+    numero = models.CharField(max_length=8, blank=True, unique=True)
     data_criacao = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
