@@ -1,4 +1,4 @@
-from datetime import datetime
+from django.utils.dateparse import parse_datetime
 import re
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -28,10 +28,8 @@ def log_request(user, endpoint, method, request_body='', response_body=''):
     )
     log.save()
 
-
 @extend_schema_view(
     post=extend_schema(tags=['Cartão']),
-    get=extend_schema(tags=['Cartão'])
 )
 class UploadCartaoFileView(APIView):
     parser_classes = [MultiPartParser]
@@ -40,8 +38,7 @@ class UploadCartaoFileView(APIView):
     def post(self, request, *args, **kwargs):
         file = request.FILES.get('file')
         if not file:
-            log_request(request.user, request.path, request.method, str(
-                request.data), '{"error": "Nenhum arquivo fornecido"}')
+            log_request(request.user, request.path, request.method, str(request.data), '{"error": "Nenhum arquivo fornecido"}')
             return Response(
                 {'error': 'Nenhum arquivo fornecido'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -56,8 +53,7 @@ class UploadCartaoFileView(APIView):
                 if i == 0:
                     nome = decoded_line[0:29].strip()
                     data = decoded_line[29:37].strip()
-                    data_formatada = datetime.strptime(
-                        data, '%Y%m%d').strftime('%d-%m-%Y')
+                    data_formatada = parse_datetime(data).strftime('%d-%m-%Y')
                     lote = decoded_line[41:45].strip()
                 else:
                     numero_cartao = decoded_line[7:27].strip()
@@ -65,20 +61,17 @@ class UploadCartaoFileView(APIView):
                         cartoes_validos.add(numero_cartao)
 
             if not lote:
-                log_request(request.user, request.path, request.method, str(
-                    request.data), '{"error": "Lote não encontrado no arquivo"}')
-                return Response({
-                                'error': 'Lote não encontrado no arquivo'},
-                                status=status.HTTP_400_BAD_REQUEST
-                                )
+                log_request(request.user, request.path, request.method, str(request.data), '{"error": "Lote não encontrado no arquivo"}')
+                return Response(
+                    {'error': 'Lote não encontrado no arquivo'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            cartoes_existentes = set(Cartao.objects.filter(
-                numero__in=cartoes_validos).values_list('numero', flat=True))
+            cartoes_existentes = set(Cartao.objects.filter(numero__in=cartoes_validos).values_list('numero', flat=True))
             cartoes_a_inserir = cartoes_validos - cartoes_existentes
 
             if not cartoes_a_inserir:
-                log_request(request.user, request.path, request.method, str(
-                    request.data), '{"error": "Todos os cartões no arquivo já estão cadastrados ou são inválidos."}')
+                log_request(request.user, request.path, request.method, str(request.data), '{"error": "Todos os cartões no arquivo já estão cadastrados ou são inválidos."}')
                 return Response(
                     {'error': 'Todos os cartões no arquivo já estão cadastrados ou são inválidos.'},
                     status=status.HTTP_400_BAD_REQUEST
@@ -96,13 +89,11 @@ class UploadCartaoFileView(APIView):
             )
 
             serializer = LoteCartoesSerializer(lote_cartoes)
-            log_request(request.user, request.path, request.method,
-                        str(request.data), serializer.data)
+            log_request(request.user, request.path, request.method, str(request.data), serializer.data)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error(f"Error processing file: {e}")
-            log_request(request.user, request.path, request.method,
-                        str(request.data), f'{{"error": "{str(e)}"}}')
+            log_request(request.user, request.path, request.method, str(request.data), f'{{"error": "{str(e)}"}}')
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -111,7 +102,6 @@ class UploadCartaoFileView(APIView):
 
 @extend_schema_view(
     post=extend_schema(tags=['Cartão']),
-    get=extend_schema(tags=['Cartão'])
 )
 class CartaoCreateView(generics.CreateAPIView):
     queryset = Cartao.objects.all()
@@ -127,7 +117,6 @@ class CartaoCreateView(generics.CreateAPIView):
 
 
 @extend_schema_view(
-    post=extend_schema(tags=['Cartão']),
     get=extend_schema(tags=['Cartão'])
 )
 class CartaoListView(generics.ListAPIView):
@@ -144,7 +133,6 @@ class CartaoListView(generics.ListAPIView):
 
 
 @extend_schema_view(
-    post=extend_schema(tags=['Cartão']),
     get=extend_schema(tags=['Cartão'])
 )
 class CartaoSearchView(APIView):

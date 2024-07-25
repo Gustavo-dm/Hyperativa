@@ -27,4 +27,4 @@ class UploadCartaoFileSerializer(serializers.Serializer):
 
 class CartaoSearchSerializer(serializers.Serializer):
     model = Cartao
-    fields = ['numero']
+    numero = serializers.CharField()

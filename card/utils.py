@@ -1,25 +1,28 @@
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import unpad
-from base64 import b64decode
-from django.http import JsonResponse
-from rest_framework.views import APIView
-from rest_framework.parsers import JSONParser
-from rest_framework.response import Response
-from rest_framework import status
+import random
 
-secret_key = b'your-secret-key-32' 
-iv = b'initialvector123'  
+def generate_lote_line():
+    return "DESAFIO-HYPERATIVA           20180524LOTE0001000010   // [01-29]NOME   [30-37]DATA   [38-45]LOTE   [46-51]QTD DE REGISTROS\n"
 
-class DecryptDataView(APIView):
-    def post(self, request, *args, **kwargs):
-        encrypted_data = request.data.get('data')
+def generate_cartao_lines():
+    lines = []
+    for i in range(1, 101):
+        identifier = f"C{i:<4}"  # Adjusted to 4 characters wide for alignment
+        card_number = f"{random.randint(1000000000000000, 9999999999999999)}"
+        lines.append(f"{identifier} {card_number:<50} // [01-01]IDENTIFICADOR DA LINHA   [02-07]NUMERAÇÃO NO LOTE   [08-26]NÚMERO DE CARTAO COMPLETO\n")
+    return lines
 
-        if not encrypted_data:
-            return JsonResponse({'error': 'No data provided'}, status=status.HTTP_400_BAD_REQUEST)
+def generate_lote_footer():
+    return "LOTE0001000010                                        // [01-08]LOTE   [09-14]QTD DE REGISTROS\n"
 
-        try:
-            cipher = AES.new(secret_key, AES.MODE_CBC, iv)
-            decrypted_data = unpad(cipher.decrypt(b64decode(encrypted_data)), AES.block_size)
-            return JsonResponse({'data': decrypted_data.decode('utf-8')}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+def main():
+    lote_line = generate_lote_line()
+    cartao_lines = generate_cartao_lines()
+    lote_footer = generate_lote_footer()
+
+    with open("output.txt", "w") as file:
+        file.write(lote_line)
+        file.writelines(cartao_lines)
+        file.write(lote_footer)
+
+if __name__ == "__main__":
+    main()
